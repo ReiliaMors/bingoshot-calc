@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ビンゴショット 計算機 (14枚コンプリート・完全体)</title>
+    <style>
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            background-color: #121212;
+            color: #ffffff;
+            text-align: center;
+            padding: 10px;
+            margin: 0;
+        }
+        h1 {
+            font-size: 1.1rem;
+            margin: 5px 0;
+            color: #ffcc00;
+        }
+
+        /* 横スクロール初期カード選択 */
+        .card-visual-selector {
+            display: flex;
+            overflow-x: auto;
+            gap: 12px;
+            padding: 10px;
+            background-color: #1e1e1e;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            -webkit-overflow-scrolling: touch;
+        }
+        .thumb-card {
+            flex: 0 0 auto;
+            width: 85px;
+            background-color: #2a2a2a;
+            border: 2px solid #444;
+            border-radius: 6px;
+            padding: 6px;
+            cursor: pointer;
+            text-align: center;
+        }
+        .thumb-card.active {
+            border-color: #ffcc00;
+            background-color: #3a3a30;
+            box-shadow: 0 0 8px rgba(255, 204, 0, 0.5);
+        }
+        .thumb-name {
+            font-size: 0.65rem;
+            font-weight: bold;
+            margin-bottom: 4px;
+            white-space: nowrap;
+        }
+        .thumb-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 1px;
+            background-color: #444;
+            padding: 1px;
+            border-radius: 2px;
+        }
+        .thumb-cell {
+            width: 13px;
+            height: 13px;
+            background-color: #1a1a1a;
+        }
+        .thumb-cell.f { background-color: #2ed573; } /* 緑：初期FREE */
+        .thumb-cell.y { background-color: #ffa502; } /* 黄：T1 */
+        .thumb-cell.o { background-color: #ff7f50; } /* オレンジ：T2 */
+
+        /* 5x5 メイングリッド */
+        .grid-container {
+            display: flex;
+            flex-direction: column; /* 上下反転修正に合わせ、通常方向(上から下)へ */
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .row {
+            display: flex;
+        }
+        .cell {
+            width: 55px;
+            height: 55px;
+            margin: 3px;
+            border: 2px solid #444;
+            border-radius: 8px;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.8rem;
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.15s;
+        }
+
+        /* 筐体イメージ：縦ラインのうっすら5色化（暗め） */
+        .cell[data-col="0"] { background-color: #2a1515; } /* 1列目：うっすら赤 */
+        .cell[data-col="1"] { background-color: #2a2515; } /* 2列目：うっすら黄 */
+        .cell[data-col="2"] { background-color: #152a15; } /* 3列目：うっすら緑 */
+        .cell[data-col="3"] { background-color: #15202a; } /* 4列目：うっすら青 */
+        .cell[data-col="4"] { background-color: #20152a; } /* 5列目：うっすら紫 */
+
+        /* メインセルの状態色変化 */
+        .cell.hit {
+            background-color: #ff4757 !important;
+            border-color: #ff6b81 !important;
+            color: white !important;
+        }
+        .cell.init-free { background-color: #2ed573 !important; color: #111; }
+        .cell.ticket-1 { background-color: #ffa502 !important; color: #111; }
+        .cell.ticket-2 { background-color: #ff7f50 !important; color: #111; }
+        
+        .cell-label { font-size: 0.7rem; pointer-events: none; }
+        .cell-coord { font-size: 0.55rem; opacity: 0.6; pointer-events: none; color: #fff; text-shadow: 0 1px 2px #000; }
+
+        button {
+            background-color: #ffcc00;
+            color: #111;
+            border: none;
+            padding: 12px 30px;
+            font-size: 1rem;
+            font-weight: bold;
+            border-radius: 25px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            width: 80%;
+            max-width: 300px;
+            margin: 5px 0;
+        }
+        #result {
+            margin-top: 15px;
+            background-color: #1e1e1e;
+            border: 1px solid #333;
+            border-radius: 10px;
+            padding: 15px;
+            text-align: left;
+            width: 90%;
+            max-width: 340px;
+            margin-left: auto;
+            margin-right: auto;
+            box-sizing: border-box;
+        }
+        .recommended { color: #ffcc00; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <h1>🎰 ビンゴショット 計算機 (No.01〜14 完全体)</h1>
+
+    <p style="font-size: 0.75rem; color: #aaa; margin: 0 0 2px 0;">👇 カードをタップして選択</p>
+    <div class="card-visual-selector" id="visual-selector"></div>
+
+    <p style="font-size: 0.75rem; color: #aaa; margin: 0 0 5px 0;">①カード選択 ➔ ②実際に球がHITしたマスをタップ ➔ ③計算</p>
+
+    <!-- 5x5 ビンゴ盤面 (上下反転修正：上がrow0、下がrow4で実機と完全一致) -->
+    <div class="grid-container">
+        <div class="row" data-row="0">
+            <div class="cell" id="cell-0-0" data-col="0" data-row="0"><span class="cell-label"></span><span class="cell-coord">1,5</span></div>
+            <div class="cell" id="cell-1-0" data-col="1" data-row="0"><span class="cell-label"></span><span class="cell-coord">2,5</span></div>
+            <div class="cell" id="cell-2-0" data-col="2" data-row="0"><span class="cell-label"></span><span class="cell-coord">3,5</span></div>
+            <div class="cell" id="cell-3-0" data-col="3" data-row="0"><span class="cell-label"></span><span class="cell-coord">4,5</span></div>
+            <div class="cell" id="cell-4-0" data-col="4" data-row="0"><span class="cell-label"></span><span class="cell-coord">5,5</span></div>
+        </div>
+        <div class="row" data-row="1">
+            <div class="cell" id="cell-0-1" data-col="0" data-row="1"><span class="cell-label"></span><span class="cell-coord">1,4</span></div>
+            <div class="cell" id="cell-1-1" data-col="1" data-row="1"><span class="cell-label"></span><span class="cell-coord">2,4</span></div>
+            <div class="cell" id="cell-2-1" data-col="2" data-row="1"><span class="cell-label"></span><span class="cell-coord">3,4</span></div>
+            <div class="cell" id="cell-3-1" data-col="3" data-row="1"><span class="cell-label"></span><span class="cell-coord">4,4</span></div>
+            <div class="cell" id="cell-4-1" data-col="4" data-row="1"><span class="cell-label"></span><span class="cell-coord">5,4</span></div>
+        </div>
+        <div class="row" data-row="2">
+            <div class="cell" id="cell-0-2" data-col="0" data-row="2"><span class="cell-label"></span><span class="cell-coord">1,3</span></div>
+            <div class="cell" id="cell-1-2" data-col="1" data-row="2"><span class="cell-label"></span><span class="cell-coord">2,3</span></div>
+            <div class="cell" id="cell-2-2" data-col="2" data-row="2"><span class="cell-label"></span><span class="cell-coord">3,3</span></div>
+            <div class="cell" id="cell-3-2" data-col="3" data-row="2"><span class="cell-label"></span><span class="cell-coord">4,3</span></div>
+            <div class="cell" id="cell-4-2" data-col="4" data-row="2"><span class="cell-label"></span><span class="cell-coord">5,3</span></div>
+        </div>
+        <div class="row" data-row="3">
+            <div class="cell" id="cell-0-3" data-col="0" data-row="3"><span class="cell-label"></span><span class="cell-coord">1,2</span></div>
+            <div class="cell" id="cell-1-3" data-col="1" data-row="3"><span class="cell-label"></span><span class="cell-coord">2,2</span></div>
+            <div class="cell" id="cell-2-3" data-col="2" data-row="3"><span class="cell-label"></span><span class="cell-coord">3,2</span></div>
+            <div class="cell" id="cell-3-3" data-col="3" data-row="3"><span class="cell-label"></span><span class="cell-coord">4,2</span></div>
+            <div class="cell" id="cell-4-3" data-col="4" data-row="3"><span class="cell-label"></span><span class="cell-coord">5,2</span></div>
+        </div>
+        <div class="row" data-row="4">
+            <div class="cell" id="cell-0-4" data-col="0" data-row="4"><span class="cell-label"></span><span class="cell-coord">1,1</span></div>
+            <div class="cell" id="cell-1-4" data-col="1" data-row="4"><span class="cell-label"></span><span class="cell-coord">2,1</span></div>
+            <div class="cell" id="cell-2-4" data-col="2" data-row="4"><span class="cell-label"></span><span class="cell-coord">3,1</span></div>
+            <div class="cell" id="cell-3-4" data-col="3" data-row="4"><span class="cell-label"></span><span class="cell-coord">4,1</span></div>
+            <div class="cell" id="cell-4-4" data-col="4" data-row="4"><span class="cell-label"></span><span class="cell-coord">5,1</span></div>
+        </div>
+    </div>
+
+    <button onclick="calculateBestPlacement()">⚡ 最適配置を計算 ⚡</button>
+
+    <div id="result">
+        <div style="font-weight: bold; border-bottom: 1px solid #444; padding-bottom: 5px; margin-bottom: 10px;">📊 弾き出された最適配置</div>
+        <div id="result-content">カードを選択し、5球のHITマスを入力してください。</div>
+    </div>
+
+    <script>
+        const BINGO_LINES = [];
+        for (let r = 0; r < 5; r++) BINGO_LINES.push(Array.from({length: 5}, (_, c) => `${c},${r}`));
+        for (let c = 0; c < 5; c++) BINGO_LINES.push(Array.from({length: 5}, (_, r) => `${c},${r}`));
+        BINGO_LINES.push(Array.from({length: 5}, (_, i) => `${i},${i}`));
+        BINGO_LINES.push(Array.from({length: 5}, (_, i) => `${i},${4-i}`));
+
+        // 14枚の完全コピペ用データベース (No.01〜14)
+        const CARD_TEMPLATES = [
+            { name: "No.01 (32.7%)", freeTxt: ["〇〇●〇〇", "〇〇〇〇〇", "●〇●〇●", "〇〇〇〇〇", "〇〇●〇〇"], t1Txt: ["〇●〇●〇", "●●〇●●", "〇〇〇〇〇", "●●〇●●", "〇●〇●〇"], t2Txt: ["〇〇〇〇〇", "〇〇〇〇〇", "〇〇〇〇〇", "〇〇〇〇〇", "〇〇〇〇〇"] },
+            { name: "No.02 (35.0%)", freeTxt: ["〇〇〇〇〇", "〇〇●〇〇", "〇●●●〇", "〇〇●〇〇", "〇〇〇〇〇"], t1Txt: ["〇〇〇●●", "〇〇〇●〇", "〇〇〇〇〇", "〇●〇〇〇", "●●〇〇〇"], t2Txt: ["●●〇〇〇", "〇〇〇〇〇", "〇〇〇〇〇", "〇〇〇〇〇", "〇〇〇●●"] },
+            { name: "No.03 (44.8%)", freeTxt: ["〇●〇〇〇", "〇〇〇●〇", "〇〇●〇〇", "〇●〇〇〇", "〇〇〇●〇"], t1Txt: ["〇〇●〇●", "〇●●〇●", "●〇〇〇●", "●〇●●〇", "●〇●〇〇"], t2Txt: ["〇〇〇〇〇", "〇〇〇〇〇", "〇〇〇〇〇", "〇〇〇〇〇", "〇〇〇〇〇"] },
+            { name: "No.04 (45.5%)", freeTxt: ["〇〇〇〇〇", "〇〇●〇〇", "〇●〇●〇", "〇〇●〇〇", "〇〇〇〇〇"], t1Txt: ["●●〇〇〇", "●〇〇●●", "〇〇〇〇〇", "●●〇〇●", "〇〇〇●●"], t2Txt: ["〇〇〇●●", "〇〇〇〇〇", "〇〇●〇〇", "〇〇〇〇〇", "●●〇〇〇"] },
+            { name: "No.05 (47.1%)", freeTxt: ["〇〇●〇〇", "〇〇〇〇〇", "●〇●〇●", "〇〇〇〇〇", "〇〇●〇〇"], t1Txt: ["●〇〇〇〇", "〇〇●●〇", "〇〇〇〇〇", "〇●●〇〇", "〇〇〇〇●"], t2Txt: ["〇〇〇〇●", "〇●〇〇〇", "〇●〇●〇", "〇〇〇●〇", "●〇〇〇〇"] },
+            { name: "No.06 (52.2%)", freeTxt: ["〇〇●〇〇", "〇〇〇●〇", "〇〇〇〇〇", "〇●〇〇〇", "〇〇●〇〇"], t1Txt: ["●●〇〇〇", "●〇●〇〇", "〇〇●〇〇", "〇〇●〇●", "〇〇〇●●"], t2Txt: ["〇〇〇●●", "〇〇〇〇〇", "〇〇〇〇〇", "〇〇〇〇〇", "●●〇〇〇"] },
+            { name: "No.07 (53.6%)", freeTxt: ["〇●〇〇〇", "●〇〇〇〇", "〇〇●〇〇", "〇〇〇〇●", "〇〇〇●〇"], t1Txt: ["〇〇〇〇〇", "〇●●〇〇", "〇●〇●〇", "〇〇●●〇", "〇〇〇〇〇"], t2Txt: ["〇〇〇●●", "〇〇〇〇●", "〇〇〇〇〇", "●〇〇〇〇", "●●〇〇〇"] },
+            { name: "No.08 (54.3%)", freeTxt: ["●〇〇〇●", "〇〇〇〇〇", "〇〇●〇〇", "〇〇〇〇〇", "●〇〇〇●"], t1Txt: ["〇●〇●〇", "●●〇●●", "〇〇〇〇〇", "●●〇●●", "〇●〇●〇"], t2Txt: ["〇〇〇〇〇", "〇〇〇〇〇", "〇〇〇〇〇", "〇〇〇〇〇", "〇〇〇〇〇"] },
+            { name: "No.09 (55.4%)", freeTxt: ["〇●〇〇〇", "〇〇〇●〇", "〇〇●〇〇", "〇●〇〇〇", "〇〇〇●〇"], t1Txt: ["〇〇〇●●", "〇〇〇〇〇", "〇〇〇〇〇", "〇〇〇〇〇", "●●〇〇〇"], t2Txt: ["●〇〇〇〇", "●●〇〇〇", "〇〇〇〇〇", "〇〇〇●●", "〇〇〇〇●"] },
+            { name: "No.10 (56.1%)", freeTxt: ["〇〇●〇〇", "〇●〇●〇", "〇〇〇〇〇", "〇●〇●〇", "〇〇●〇〇"], t1Txt: ["●●〇●●", "●〇〇〇●", "〇●●●〇", "●〇〇〇●", "●●〇●●"], t2Txt: ["〇〇〇〇〇", "〇〇〇〇〇", "〇〇〇〇〇", "〇〇〇〇〇", "〇〇〇〇〇"] },
+            { name: "No.11 (57.2%)", freeTxt: ["〇〇●〇〇", "〇〇〇〇●", "〇〇●〇〇", "●〇〇〇〇", "〇〇●〇〇"], t1Txt: ["〇〇〇〇〇", "●●●●〇", "〇〇〇〇〇", "〇●●●●", "〇〇〇〇〇"], t2Txt: ["〇〇〇〇〇", "〇〇〇〇〇", "●●〇●●", "〇〇〇〇〇", "〇〇〇〇〇"] },
+            { name: "No.12 (58.5%)", freeTxt: ["●〇〇〇〇", "〇〇〇〇〇", "●〇●〇●", "〇〇〇〇〇", "〇〇〇〇●"], t1Txt: ["〇〇●●●", "〇〇〇〇〇", "〇〇〇〇〇", "〇〇〇〇〇", "●●●〇〇"], t2Txt: ["〇〇〇〇〇", "●●〇〇〇", "〇●〇●〇", "〇〇〇●●", "〇〇〇〇〇"] },
+            { name: "No.13 (59.9%)", freeTxt: ["●〇〇〇〇", "〇〇●〇〇", "〇〇●〇〇", "〇〇●〇〇", "〇〇〇〇●"], t1Txt: ["〇●●〇●", "〇●〇●●", "〇〇〇〇〇", "●●〇●〇", "●〇●●〇"], t2Txt: ["〇〇〇〇〇", "〇〇〇〇〇", "●●〇●●", "〇〇〇〇〇", "〇〇〇〇〇"] },
+            { name: "No.14 (61.2%)", freeTxt: ["〇〇●〇〇", "〇〇〇〇〇", "〇●〇●〇", "〇〇〇〇〇", "●〇〇〇●"], t1Txt: ["●〇〇〇●", "●〇●〇●", "●〇●〇●", "●〇●〇●", "〇〇●〇〇"], t2Txt: ["〇●〇●〇", "〇●〇●〇", "〇〇〇〇〇", "〇〇〇〇〇", "〇〇〇〇〇"] }
+        ];
+
+        // 上下反転修正ロジック：配列の0番目をそのまま row=0 に安全マッピング
+        function parseTxtToSet(txtArray) {
+            const positions = new Set();
+            for (let r = 0; r < 5; r++) {
+                const rowString = txtArray[r];
+                for (let c = 0; c < 5; c++) {
+                    if (rowString[c] === "●") {
+                        positions.add(`${c},${r}`);
+                    }
+                }
+            }
+            return positions;
+        }
+
+        let activeTemplateIndex = 0;
+
+        function generateVisualSelector() {
+            const container = document.getElementById('visual-selector');
+            CARD_TEMPLATES.forEach((card, index) => {
+                const thumb = document.createElement('div');
+                thumb.className = `thumb-card ${index === 0 ? 'active' : ''}`;
+                thumb.id = `thumb-${index}`;
+                thumb.onclick = () => selectCardVisual(index);
+
+                const nameDiv = document.createElement('div');
+                nameDiv.className = 'thumb-name';
+                nameDiv.innerText = card.name;
+                thumb.appendChild(nameDiv);
+
+                const grid = document.createElement('div');
+                grid.className = 'thumb-grid';
+
+                for (let r = 0; r < 5; r++) {
+                    for (let c = 0; c < 5; c++) {
+                        const cell = document.createElement('div');
+                        cell.className = 'thumb-cell';
+                        if (card.freeTxt[r][c] === "●") cell.classList.add('f');
+                        else if (card.t1Txt[r][c] === "●") cell.classList.add('y');
+                        else if (card.t2Txt[r][c] === "●") cell.classList.add('o');
+                        grid.appendChild(cell);
+                    }
+                }
+                thumb.appendChild(grid);
+                container.appendChild(thumb);
+            });
+        }
+
+        function selectCardVisual(index) {
+            document.querySelectorAll('.thumb-card').forEach(t => t.classList.remove('active'));
+            document.getElementById(`thumb-${index}`).classList.add('active');
+            activeTemplateIndex = index;
+            applyInitialCard();
+        }
+
+        function applyInitialCard() {
+            const template = CARD_TEMPLATES[activeTemplateIndex];
+            template.freesSet = parseTxtToSet(template.freeTxt);
+            template.yellowsSet = parseTxtToSet(template.t1Txt);
+            template.orangesSet = parseTxtToSet(template.t2Txt);
+
+            document.querySelectorAll('.cell').forEach(cell => {
+                cell.className = "cell";
+                const c = cell.getAttribute('data-col');
+                const r = cell.getAttribute('data-row');
+                const pos = `${c},${r}`;
+                const label = cell.querySelector('.cell-label');
+                label.innerText = "";
+
+                if (template.freesSet.has(pos)) {
+                    cell.classList.add('init-free');
+                    label.innerText = "FREE";
+                } else if (template.yellowsSet.has(pos)) {
+                    cell.classList.add('ticket-1');
+                    label.innerText = "T1";
+                } else if (template.orangesSet.has(pos)) {
+                    cell.classList.add('ticket-2');
+                    label.innerText = "T2";
+                }
+            });
+        }
+
+        document.querySelectorAll('.cell').forEach(cell => {
+            cell.addEventListener('click', () => cell.classList.toggle('hit'));
+        });
+
+        function getCombinations(array, k) {
+            const result = [];
+            function helper(start, combo) {
+                if (combo.length === k) { result.push([...combo]); return; }
+                for (let i = start; i < array.length; i++) { combo.push(array[i]); helper(i + 1, combo); combo.pop(); }
+            }
+            helper(0, []); return result;
+        }
+
+        function cartesianProduct(arrays) {
+            return arrays.reduce((acc, curr) => {
+                const res = [];
+                acc.forEach(a => curr.forEach(b => res.push([...a, ...b])));
+                return res;
+            }, [[]]);
+        }
+
+        function calculateScore(hitSet, freeList) {
+            const active = new Set([...hitSet, ...freeList]);
+            let score = 0;
+            BINGO_LINES.forEach(line => {
+                let matched = 0;
+                line.forEach(pos => { if (active.has(pos)) matched++; });
+                if (matched === 5) score += 100.0;
+                else if (matched === 4) score += 15.0;
+                else if (matched === 3) score += 3.0;
+                else if (matched === 2) score += 0.5;
+            });
+            return score;
+        }
+
+        function calculateBestPlacement() {
+            const template = CARD_TEMPLATES[activeTemplateIndex];
+            const hitSquares = new Set();
+            document.querySelectorAll('.cell.hit').forEach(cell => {
+                hitSquares.add(`${cell.getAttribute('data-col')},${cell.getAttribute('data-row')}`);
+            });
+
+            const earnedFrees = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0};
+            let totalFrees = 0;
+
+            hitSquares.forEach(pos => {
+                const [col, row] = pos.split(',').map(Number);
+                if (template.yellowsSet.has(pos)) { earnedFrees[col] += 1; totalFrees += 1; }
+                if (template.orangesSet.has(pos)) { earnedFrees[col] += 2; totalFrees += 2; }
+            });
+
+            const baseActives = new Set([...hitSquares, ...template.freesSet]);
+
+            if (totalFrees === 0) {
+                document.getElementById('result-content').innerHTML = `<span style="color: #ff9f43; font-weight: bold;">FREE未獲得</span><br>T1 / T2 のマスに入りませんでした。`;
+                return;
+            }
+
+            const choicesByCol = [];
+            for (let c = 0; c < 5; c++) {
+                const count = earnedFrees[c];
+                if (count === 0) continue;
+                const available = [];
+                for (let r = 0; r < 5; r++) {
+                    const pos = `${c},${r}`;
+                    if (!baseActives.has(pos)) available.push(pos);
+                }
+                if (available.length < count) {
+                    document.getElementById('result-content').innerHTML = `<span style="color: #ff4757; font-weight: bold;">エラー</span><br>${c}列目の空きマスが足りません。`;
+                    return;
+                }
+                choicesByCol.push(getCombinations(available, count));
+            }
+
+            const allPatterns = cartesianProduct(choicesByCol);
+            let bestScore = -1;
+            let bestPatterns = [];
+
+            allPatterns.forEach(pattern => {
+                const score = calculateScore(baseActives, pattern);
+                if (score > bestScore) { bestScore = score; bestPatterns = [pattern]; }
+                else if (score === bestScore) { bestPatterns.push(pattern); }
+            });
+
+            let html = `
+                <p style="margin: 0 0 10px 0;">獲得したFREE: <strong style="color: #2ed573;">計 ${totalFrees} 個</strong></p>
+                <p>最大期待値スコア: <strong style="color: #ffcc00; font-size:1.1rem;">${bestScore.toFixed(1)}</strong></p>
+                <p style="border-bottom: 1px dashed #444; padding-bottom: 5px; margin: 10px 0;">💡 推奨配置パターン</p>
+            `;
+
+            const displayLimit = Math.min(bestPatterns.length, 3);
+            for (let i = 0; i < displayLimit; i++) {
+                const pattern = bestPatterns[i];
+                const desc = pattern.map(pos => {
+                    const [c, r] = pos.split(',').map(Number);
+                    // 上下反転修正に合わせ、テキスト案内も「下から何番目」を直感的に「1〜5」に正しく表現
+                    return `<span class="recommended">左から${c+1}番目の列 [上から${c+1}番目の列の、上から${r+1}番目]</span>`;
+                }).join(' と ');
+                
+                // より直感的にするため「上から〇番目」の記述に補正
+                const cleanDesc = pattern.map(pos => {
+                    const [c, r] = pos.split(',').map(Number);
+                    const colNames = ["赤", "黄", "緑", "青", "紫"];
+                    return `<span class="recommended">${colNames[c]}の列 (上から ${r+1} 番目)</span>`;
+                }).join(' と <br>');
+
+                html += `<p style="font-size: 0.9rem; line-height: 1.4;"><strong>案 ${i + 1}:</strong> <br>${cleanDesc}</p>`;
+            }
+            document.getElementById('result-content').innerHTML = html;
+        }
+
+        window.onload = () => {
+            generateVisualSelector();
+            applyInitialCard();
+        };
+    </script>
+</body>
+</html>
